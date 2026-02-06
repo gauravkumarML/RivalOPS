@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rivalops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile.api
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rivalops
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL_FAST: gpt-4o-mini
+      OPENAI_MODEL_SMART: gpt-4o
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      RIVALOPS_BASE_URL: http://localhost:8000
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+    command: uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.worker
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rivalops
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL_FAST: gpt-4o-mini
+      OPENAI_MODEL_SMART: gpt-4o
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY}
+    depends_on:
+      - postgres
+    command: python -m apps.worker.main
+
+volumes:
+  postgres_data:
+

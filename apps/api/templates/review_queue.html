@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-2xl font-semibold">Pending Briefings</h1>
+</div>
+
+{% if briefings %}
+<div class="bg-white shadow overflow-hidden sm:rounded-md">
+  <ul class="divide-y divide-gray-200">
+    {% for b in briefings %}
+    <li>
+      <a href="/review/{{ b.id }}" class="block hover:bg-gray-50">
+        <div class="px-4 py-4 sm:px-6 flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-indigo-600 truncate">
+              {{ b.title or "Untitled briefing" }}
+            </p>
+            <p class="mt-1 text-sm text-gray-500">
+              Briefing #{{ b.id }} • Status: {{ b.review_status }}
+            </p>
+          </div>
+          <div class="ml-2 flex-shrink-0">
+            <span
+              class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800"
+              >Pending</span
+            >
+          </div>
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% else %}
+<p class="text-sm text-gray-500">No pending briefings right now.</p>
+{% endif %}
+{% endblock %}
+

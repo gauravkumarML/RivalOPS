@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RivalOps</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-gray-50 text-gray-900">
+    <nav class="bg-white border-b border-gray-200">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
+        <div class="flex items-center space-x-4">
+          <span class="text-xl font-semibold">RivalOps</span>
+          <a href="/review/queue" class="text-sm text-gray-600 hover:text-gray-900"
+            >Review Queue</a
+          >
+        </div>
+        <div class="text-xs text-gray-400">Prototype</div>
+      </div>
+    </nav>
+    <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>
+
