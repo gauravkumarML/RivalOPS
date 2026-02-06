@@ -1,0 +1,10 @@
+[project]
+name = "rivalops"
+version = "0.1.0"
+description = "RivalOps prototype - semantic competitor monitoring"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.ruff]
+line-length = 100
+
