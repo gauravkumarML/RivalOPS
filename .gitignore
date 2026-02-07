@@ -1,4 +1,4 @@
-# Ignore Cursor configuration and rules
+
 .cursor/
 .venv
 .env
