@@ -14,15 +14,15 @@ The heart of RivalOPS is a stateful workflow built with [LangGraph](https://gith
 
 ```mermaid
 graph TD
-    Start([Start]) --> Fetch[Fetch History & Targets]
-    Fetch --> Scrape[Scrape Website (Firecrawl)]
-    Scrape --> Analyze{Generative AI Analysis}
+    Start([Start]) --> Fetch["Fetch History & Targets"]
+    Fetch --> Scrape["Scrape Website (Firecrawl)"]
+    Scrape --> Analyze{"Generative AI Analysis"}
     
-    Analyze -- "No Meaningful Change" --> End([End Run])
-    Analyze -- "Drift Detected" --> Draft[Draft Executive Briefing]
+    Analyze -- "No Meaningful Change" --> EndNode([End Run])
+    Analyze -- "Drift Detected" --> Draft["Draft Executive Briefing"]
     
-    Draft --> HumanGate[Human Review Queue]
-    HumanGate --> Slack[Publish to Slack]
+    Draft --> HumanGate["Human Review Queue"]
+    HumanGate --> Slack["Publish to Slack"]
 ```
 
 ### System Components
@@ -30,19 +30,19 @@ graph TD
 ```mermaid
 graph LR
     subgraph Infrastructure
-        DB[(Postgres/SQLite)]
-        Worker[Celery Worker / Cron]
+        DB[("Postgres/SQLite")]
+        Worker["Celery Worker / Cron"]
     end
     
     subgraph App
-        API[FastAPI Server]
-        UI[Review Dashboard]
+        API["FastAPI Server"]
+        UI["Review Dashboard"]
     end
     
     Worker -->|Triggers| API
     API -->|Reads/Writes| DB
     UI -->|Reads| DB
-    UI -->|Approves| Slack(Corporate Slack)
+    UI -->|Approves| Slack("Corporate Slack")
 ```
 
 ---
