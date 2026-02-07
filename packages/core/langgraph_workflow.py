@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -26,6 +27,8 @@ from .models import (
 
 client = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class WorkflowState:
@@ -44,6 +47,8 @@ async def node_fetch_history(state: WorkflowState) -> WorkflowState:
         target = session.get(Target, state.target_id)
         if not target:
             raise ValueError(f"Target {state.target_id} not found")
+
+        logger.info("Target found: %s (ID: %s, URL: %s)", target.label, target.id, target.url)
 
         run = Run(
             target_id=target.id,
@@ -69,19 +74,18 @@ async def _call_llm_analyst(
     if client is None:
         raise RuntimeError("OpenAI client not configured (OPENAI_API_KEY missing)")
 
-    response = await client.responses.create(
+    response = await client.chat.completions.create(
         model=model,
-        input=prompt,
+        messages=[{"role": "user", "content": prompt}],
         temperature=temperature,
         response_format={"type": "json_object"},
     )
-    # For the OpenAI Responses API, the content is under output[0].content[0].text
-    item = response.output[0].content[0]
-    if item.type != "output_text":
-        raise RuntimeError("Unexpected response type from LLM")
     import json
 
-    return json.loads(item.text)
+    content = response.choices[0].message.content
+    if not content:
+        raise RuntimeError("Empty response from LLM")
+    return json.loads(content)
 
 
 def _build_analysis_prompt(
@@ -111,13 +115,18 @@ async def node_analyze(state: WorkflowState) -> WorkflowState:
     if state.snapshot_id is None or state.run_id is None:
         raise ValueError("snapshot_id and run_id required before analysis")
 
+    # Extract content while session is open
+    content_markdown: str
+    history_snippets: List[str] = []
     with get_session() as session:
         snapshot = session.get(Snapshot, state.snapshot_id)
         if not snapshot:
             raise ValueError(f"Snapshot {state.snapshot_id} not found")
 
+        # Extract content before session closes
+        content_markdown = snapshot.content_markdown
+
         # Fetch a few previous snapshots for context (not heavily used yet).
-        history_snippets: List[str] = []
         prev_snaps: List[Snapshot] = (
             session.execute(
                 select(Snapshot)
@@ -131,7 +140,7 @@ async def node_analyze(state: WorkflowState) -> WorkflowState:
         for s in prev_snaps:
             history_snippets.append(s.content_markdown[:2000])
 
-    prompt = _build_analysis_prompt(snapshot.content_markdown, history_snippets)
+    prompt = _build_analysis_prompt(content_markdown, history_snippets)
 
     # Cheap-first model
     fast_model = settings.openai_model_fast
@@ -175,6 +184,13 @@ async def node_draft_briefing(state: WorkflowState) -> WorkflowState:
     if state.snapshot_id is None or state.analysis_id is None or state.run_id is None:
         raise ValueError("snapshot_id, analysis_id, and run_id required before drafting")
 
+    # Extract all needed values while session is open
+    target_label: str = ""
+    target_url: str = ""
+    change_types: List[str] = []
+    evidence: List[str] = []
+    recommended: List[str] = []
+    
     with get_session() as session:
         snapshot = session.get(Snapshot, state.snapshot_id)
         analysis = session.get(Analysis, state.analysis_id)
@@ -182,6 +198,9 @@ async def node_draft_briefing(state: WorkflowState) -> WorkflowState:
         if not snapshot or not analysis or not target:
             raise ValueError("Missing snapshot, analysis, or target")
 
+        # Extract values before session closes
+        target_label = target.label
+        target_url = target.url
         summary = analysis.diff_summary_json or {}
         change_types = summary.get("change_types", [])
         evidence = summary.get("evidence", [])
@@ -193,38 +212,46 @@ async def node_draft_briefing(state: WorkflowState) -> WorkflowState:
     prompt = f"""
 You are an executive briefing generator for a competitive intelligence team.
 
-Write a concise briefing about strategic changes on a competitor page.
+Write a concise briefing about strategic changes on a competitor page and return it as JSON.
 
-Structure:
-- title: short, business-readable
+Return a JSON object with the following structure:
+- title: short, business-readable string
 - executive_summary: 3-6 bullet points (markdown, high level)
 - details_markdown: sections "What changed", "Why it matters", "Recommended actions", "Confidence"
 - risk_level: one of "low","medium","high"
 
 Inputs:
-- target_label: {target.label if target else ""}
-- target_url: {target.url if target else ""}
+- target_label: {target_label}
+- target_url: {target_url}
 - drift_score: {state.drift_score}
 - change_types: {change_types}
 - evidence: {evidence}
 - recommended_followups: {recommended}
 """
 
-    response = await client.responses.create(
+    response = await client.chat.completions.create(
         model=settings.openai_model_fast,
-        input=prompt,
+        messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
     )
-    item = response.output[0].content[0]
-    if item.type != "output_text":
-        raise RuntimeError("Unexpected response type from LLM")
     import json
 
-    data = json.loads(item.text)
+    content = response.choices[0].message.content
+    if not content:
+        raise RuntimeError("Empty response from LLM")
+    data = json.loads(content)
 
     title = data.get("title") or "Competitor update"
     executive_summary = data.get("executive_summary") or ""
+    if isinstance(executive_summary, list):
+        executive_summary = "\n".join(f"- {s}" if not s.startswith("-") else s for s in executive_summary)
+    
     details_markdown = data.get("details_markdown") or ""
+    if isinstance(details_markdown, dict):
+        details_markdown = "\n\n".join(f"## {k}\n{v}" for k, v in details_markdown.items())
+    elif isinstance(details_markdown, list):
+        details_markdown = "\n".join(details_markdown)
+
     risk_level = data.get("risk_level") or "medium"
 
     with get_session() as session:
@@ -276,6 +303,13 @@ async def node_human_gate(state: WorkflowState) -> WorkflowState:
     return state
 
 
+def should_draft_briefing(state: WorkflowState):
+    """Conditional edge: only draft briefing if drift detected."""
+    if state.decision == AnalysisDecisionEnum.DRIFT:
+        return "draft_briefing"
+    return END
+
+
 def build_workflow_graph() -> StateGraph:
     graph = StateGraph(WorkflowState)
 
@@ -291,7 +325,7 @@ def build_workflow_graph() -> StateGraph:
     graph.add_edge("scrape", "analyze")
     graph.add_edge("analyze", "update_run_status")
     # Branch: if no drift, end; if drift, draft briefing then human gate then end.
-    graph.add_edge("update_run_status", "draft_briefing")
+    graph.add_conditional_edges("update_run_status", should_draft_briefing)
     graph.add_edge("draft_briefing", "human_gate")
     graph.add_edge("human_gate", END)
 
@@ -299,9 +333,11 @@ def build_workflow_graph() -> StateGraph:
 
 
 async def run_workflow_for_target(target_id: int) -> WorkflowState:
+    logger.info("Starting workflow for target_id=%s", target_id)
     graph = build_workflow_graph()
     app = graph.compile()
     initial = WorkflowState(target_id=target_id)
     final_state: WorkflowState = await app.ainvoke(initial)
+    logger.info("Workflow completed for target_id=%s", target_id)
     return final_state
 

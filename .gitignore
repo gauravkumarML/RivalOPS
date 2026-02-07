@@ -1,2 +1,13 @@
 # Ignore Cursor configuration and rules
 .cursor/
+.venv
+.env
+.vscode/
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+infra/.env
+__pycache__/
+tests/rivalops_test.db

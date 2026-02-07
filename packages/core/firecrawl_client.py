@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass
@@ -38,11 +39,10 @@ async def scrape_url(
     client: Optional[httpx.AsyncClient] = None,
 ) -> ScrapeResult:
     """
-    Scrape a URL using Firecrawl, with simple exponential backoff on 429/5xx.
+    Scrape a URL using Firecrawl v2 API, with simple exponential backoff on 429/5xx.
 
-    This assumes the Firecrawl API is exposed as:
-      POST https://api.firecrawl.dev/v1/scrape
-      body: { "url": "<url>", "format": "markdown" }
+    Firecrawl v2 API endpoint: POST https://api.firecrawl.dev/v2/scrape
+    body: { "url": "<url>" }
     """
     if not settings.firecrawl_api_key:
         raise FirecrawlError("FIRECRAWL_API_KEY is not set")
@@ -51,7 +51,7 @@ async def scrape_url(
         "Authorization": f"Bearer {settings.firecrawl_api_key}",
         "Content-Type": "application/json",
     }
-    payload = {"url": url, "format": "markdown"}
+    payload = {"url": url}
 
     close_client = False
     if client is None:
@@ -64,7 +64,7 @@ async def scrape_url(
             attempt += 1
             try:
                 resp = await client.post(
-                    "https://api.firecrawl.dev/v1/scrape", json=payload, headers=headers
+                    "https://api.firecrawl.dev/v2/scrape", json=payload, headers=headers
                 )
             except httpx.HTTPError as exc:
                 logger.warning("Firecrawl request error (attempt %s): %s", attempt, exc)
@@ -73,10 +73,19 @@ async def scrape_url(
             else:
                 if resp.status_code == 200:
                     data = resp.json()
-                    # The exact response schema may differ; keep this flexible.
-                    content_md = data.get("markdown") or data.get("content") or ""
+                    # Firecrawl v2 API response structure
+                    # Check for markdown in various possible locations
+                    content_md = (
+                        data.get("data", {}).get("markdown")
+                        or data.get("markdown")
+                        or data.get("data", {}).get("content")
+                        or data.get("content")
+                        or ""
+                    )
                     if not content_md:
-                        raise FirecrawlError("Firecrawl returned empty content")
+                        raise FirecrawlError(
+                            f"Firecrawl returned empty content. Response: {data}"
+                        )
                     metadata = {
                         "status_code": resp.status_code,
                         "firecrawl_raw": data,
@@ -102,7 +111,8 @@ async def scrape_url(
                             f"{resp.status_code}"
                         )
                     # simple exponential backoff
-                    await httpx.AsyncClient().aclose()  # no-op; keep awaitable
+                    wait_time = backoff_seconds * (2 ** (attempt - 1))
+                    await asyncio.sleep(wait_time)
                 else:
                     raise FirecrawlError(
                         f"Firecrawl returned non-success status {resp.status_code}: {resp.text}"

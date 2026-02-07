@@ -1,10 +1,17 @@
 from logging.config import fileConfig
+import sys
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from packages.core.db import Base, DATABASE_URL  # type: ignore
-from packages.core import models  # noqa: F401
+# Ensure project root (which contains `packages/`) is on sys.path
+# Inside Docker, WORKDIR is /app, so we need /app on the path
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # /app/infra/migrations -> /app
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from packages.core.db import Base, DATABASE_URL  # type: ignore  # noqa: E402
+from packages.core import models  # noqa: F401,E402
 
 
 config = context.config

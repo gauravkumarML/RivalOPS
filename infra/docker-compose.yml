@@ -17,6 +17,7 @@ services:
       context: ..
       dockerfile: Dockerfile.api
     environment:
+      PYTHONPATH: /app
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rivalops
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL_FAST: gpt-4o-mini
@@ -35,6 +36,7 @@ services:
       context: ..
       dockerfile: Dockerfile.worker
     environment:
+      PYTHONPATH: /app
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/rivalops
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL_FAST: gpt-4o-mini
@@ -44,6 +46,19 @@ services:
       - postgres
     command: python -m apps.worker.main
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
 volumes:
   postgres_data:
+  pgadmin_data:
 

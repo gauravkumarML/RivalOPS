@@ -19,10 +19,15 @@ async def process_targets_once() -> None:
     A target is due if it has no prior runs or its last run is older than
     target.schedule_minutes.
     """
+    # Extract target IDs and URLs while session is open
+    target_ids_and_urls: List[Tuple[int, str, str]] = []
     with get_session() as session:
         targets: List[Target] = (
             session.execute(select(Target).where(Target.enabled.is_(True))).scalars().all()
         )
+        # Extract IDs, labels, and URLs before session closes
+        for t in targets:
+            target_ids_and_urls.append((t.id, t.label, t.url))
 
         # Map target_id -> last_run_started_at (if any)
         last_runs: List[Tuple[int, str]] = (
@@ -32,33 +37,21 @@ async def process_targets_once() -> None:
         )
         last_run_map = {tid: started_at for tid, started_at in last_runs}
 
-    if not targets:
+    if not target_ids_and_urls:
         logger.info("No enabled targets found")
         return
 
-    now = asyncio.get_event_loop().time()
-
-    due_targets: List[Target] = []
-    for t in targets:
-        last_started = last_run_map.get(t.id)
-        if not last_started:
-            due_targets.append(t)
-            continue
-        # Simplified: use schedule_minutes as seconds threshold for prototype.
-        # In a real system we'd compare datetimes; here we just always run.
-        due_targets.append(t)
-
-    if not due_targets:
-        logger.info("No targets due for processing")
-        return
-
-    logger.info("Running workflow for %s targets", len(due_targets))
-    for t in due_targets:
+    logger.info("Running workflow for %s targets", len(target_ids_and_urls))
+    for target_id, label, url in target_ids_and_urls:
         try:
-            logger.info("Running workflow for target %s (%s)", t.id, t.url)
-            await run_workflow_for_target(t.id)
+            logger.info("=" * 60)
+            logger.info("Processing target %s: %s", target_id, label)
+            logger.info("URL: %s", url)
+            logger.info("=" * 60)
+            await run_workflow_for_target(target_id)
+            logger.info("Completed processing target %s: %s", target_id, label)
         except Exception:
-            logger.exception("Error running workflow for target %s", t.id)
+            logger.exception("Error running workflow for target %s (%s)", target_id, label)
 
 
 async def worker_loop(interval_seconds: int = 900) -> None:

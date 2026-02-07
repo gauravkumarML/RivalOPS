@@ -31,10 +31,10 @@ def create_app() -> FastAPI:
                 .scalars()
                 .all()
             )
-        return templates.TemplateResponse(
-            "review_queue.html",
-            {"request": request, "briefings": briefings},
-        )
+            return templates.TemplateResponse(
+                "review_queue.html",
+                {"request": request, "briefings": briefings},
+            )
 
     @app.get("/review/{briefing_id}", response_class=HTMLResponse)
     async def review_detail(briefing_id: int, request: Request):
@@ -44,10 +44,10 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=404, detail="Briefing not found")
             run: Run | None = session.get(Run, briefing.run_id)
             target: Target | None = session.get(Target, run.target_id) if run else None
-        return templates.TemplateResponse(
-            "review_detail.html",
-            {"request": request, "briefing": briefing, "target": target},
-        )
+            return templates.TemplateResponse(
+                "review_detail.html",
+                {"request": request, "briefing": briefing, "target": target},
+            )
 
     @app.post("/review/{briefing_id}/approve")
     async def approve_briefing(
