@@ -1,6 +1,6 @@
-# RivalOPS: Competitive Intelligence at Scale
+# RivalOps: Competitive Intelligence at Scale
 
-**RivalOPS** is an AI-powered competitive intelligence platform that autonomously monitors competitor websites, detects strategic shifts (e.g., pricing changes, new features), and generates executive briefings for stakeholders.
+**RivalOps** is an AI-Agent framework that autonomously monitors competitor websites, detects strategic shifts (e.g., pricing changes, new features, annoucements, etc), and generates executive briefings for stakeholders.
 
 It moves beyond simple "pixel diffs" by using **LLM Semantic Analysis** to understand *what* changed and *why it matters*.
 
@@ -10,12 +10,12 @@ It moves beyond simple "pixel diffs" by using **LLM Semantic Analysis** to under
 
 ### Core Workflow (LangGraph)
 
-The heart of RivalOPS is a stateful workflow built with [LangGraph](https://github.com/langchain-ai/langgraph).
+The heart of RivalOps is a stateful workflow built with [LangGraph](https://github.com/langchain-ai/langgraph).
 
 ```mermaid
 graph TD
     Start([Start]) --> Fetch["Fetch History & Targets"]
-    Fetch --> Scrape["Scrape Website (Firecrawl)"]
+    Fetch --> Scrape["Scrape Website"]
     Scrape --> Analyze{"Generative AI Analysis"}
     
     Analyze -- "No Meaningful Change" --> EndNode([End Run])
@@ -30,19 +30,19 @@ graph TD
 ```mermaid
 graph LR
     subgraph Infrastructure
-        DB[("Postgres/SQLite")]
-        Worker["Celery Worker / Cron"]
+        DB[("Postgres")]
+        Worker["Celery Worker"]
     end
     
     subgraph App
-        API["FastAPI Server"]
+        API["FastAPI"]
         UI["Review Dashboard"]
     end
     
     Worker -->|Triggers| API
     API -->|Reads/Writes| DB
     UI -->|Reads| DB
-    UI -->|Approves| Slack("Corporate Slack")
+    UI -->|Approves| Slack("Slack")
 ```
 
 ---
@@ -54,8 +54,18 @@ Building an autonomous intelligence agent involves overcoming noise and ensuring
 | Challenge | Solution |
 | :--- | :--- |
 | **False Positives**<br>Simulating human judgement on what counts as a "change". | **Semantic Analysis Layer**<br>Instead of flagging every CSS change, we use a two-step LLM process to discard noise (e.g., timestamps updating) and focus on semantic drifts (pricing, messaging). |
-| **Cost vs. Accuracy**<br>Running GPT-4 on every check is expensive. | **Tiered Model Strategy**<br>We use a "Fast Model" (e.g., GPT-3.5/4o-mini) for initial drift detection. Only when the confidence score is in the "gray zone" (0.45 - 0.65) do we escalate to a "Smart Model" (GPT-4) for verification. |
+| **Cost vs. Accuracy**<br>Running GPT-4 on every check is expensive. | **Model Routing**<br>We use a "Fast Model" (e.g., GPT-4o-mini) for initial drift detection. Only when the confidence score is in the "gray zone" (0.45 - 0.65) do we escalate to a "Smart Model" (GPT-4) for verification. |
 | **Trust & Safety**<br>AI hallucinations could send incorrect alerts to executives. | **Human-in-the-Loop Gate**<br>Before any briefing is sent to Slack, it enters a `PENDING` state in the Review Dashboard. A human analyst must approve or edit the briefing, ensuring 100% accuracy for high-stakes updates. |
+
+---
+
+## Interface Preview
+
+<div align="center">
+  <img src="apps/data/Screenshot%202026-02-07%20at%2014.27.01.png" width="800" style="border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" alt="Dashboard Preview 1">
+  <img src="apps/data/Screenshot%202026-02-07%20at%2014.27.31.png" width="800" style="border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" alt="Dashboard Preview 2">
+  <img src="apps/data/Screenshot%202026-02-07%20at%2015.27.01.png" width="800" style="border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" alt="Dashboard Preview 3">
+</div>
 
 ---
 
@@ -64,7 +74,8 @@ Building an autonomous intelligence agent involves overcoming noise and ensuring
 ### 1. Prerequisites
 - Python 3.10+
 - OpenAI API Key
-- Slack Webhook URL (optional for simulation)
+- Slack Webhook URL
+- Firecrawl API Key
 
 ### 2. Installation
 ```bash
@@ -74,13 +85,13 @@ pip install -r requirements.txt
 ```
 
 ### 3. Running the Simulation
-We have improved the testing experience by creating a portable simulation script that uses a local SQLite database (no Docker required).
+Ran the testing, by creating a portable simulation script that uses a local SQLite database.
 
 ```bash
-# Set up simple env vars (or use .env file)
+# Set up simple env vars
 export OPENAI_API_KEY="sk-..."
 
-# Run the drift simulation (Simulates a Competitor Pricing Change)
+# Run the drift simulation
 python3 tests/simulate_drift.py
 ```
 
@@ -90,10 +101,4 @@ python3 tests/simulate_drift.py
 3.  The Agent detects the change, analyzes it, and generates a briefing.
 4.  You will see the **Executive Briefing** printed in the terminal.
 
-### 4. Running the Dashboard
-To approve the briefing and send it to Slack:
 
-```bash
-uvicorn apps.api.main:app --reload
-```
-Visit [http://localhost:8000/review/queue](http://localhost:8000/review/queue) to see the generated briefing.
